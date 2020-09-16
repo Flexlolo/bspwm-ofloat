@@ -12,6 +12,7 @@ Dependencies
 ------------
 
 	docopt.cpp (https://github.com/docopt/docopt.cpp)
+	jq (https://github.com/stedolan/jq)
 
 Compilation and installation
 ----------------------------
@@ -21,7 +22,7 @@ Compilation and installation
 
 Usage
 -----
-	bspc subscribe node_focus node_state node_transfer node_add node_remove | bspwm-ofloat
+	bspc subscribe node_focus node_state node_add node_remove | bspwm-ofloat
 
 ### Options
 

@@ -85,28 +85,20 @@ string exec(const char* cmd)
 	return result;
 }
 
-bool window_in_map(desktop_map desktops, string desktop, string window)
+bool window_in_map(state_map windows, string window)
 {
-	if (desktops.find(desktop) != desktops.end())
-	{
-		if (desktops[desktop].find(window) != desktops[desktop].end())
-		{
-			return true;
-		}
-	}
+	return windows.find(window) != windows.end();
+}
+
+bool get_state(state_map windows, string window)
+{
+	if (window_in_map(windows, window))
+		return windows[window];
 
 	return false;
 }
 
-bool get_state(desktop_map desktops, string desktop, string window)
-{
-	if (window_in_map(desktops, desktop, window))
-		return desktops[desktop][window];
-
-	return false;
-}
-
-int pick_transparency(string window, bool floating, bool focus_floating)
+int pick_transparency(bool floating, bool focus_floating)
 {
 	if (floating)
 		return focus_floating ? transparency_active : transparency_inactive;
@@ -132,8 +124,8 @@ int main(int argc, char const *argv[])
 {
 	map<string, docopt::value> args = docopt::docopt(USAGE, 
 												{ argv + 1, argv + argc },
-												true,               // show help if requested
-												"bspwm-ofloat 1.0"); // version string
+												true,
+												"bspwm-ofloat 1.0");
 
 	transparency_active = args["--active"].asLong();
 	transparency_inactive = args["--inactive"].asLong();
@@ -143,7 +135,7 @@ int main(int argc, char const *argv[])
 		classes.insert(c);
 	}
 
-	desktop_map desktops;
+	state_map windows;
 	bool focus_floating_old = exec("bspc query -N -n focused.floating").length();
 
 	display = XOpenDisplay(NULL);
@@ -157,12 +149,7 @@ int main(int argc, char const *argv[])
 		{
 			if (classes.find(classname) != classes.end())
 			{
-				char cmd[64];
-				sprintf(cmd, "bspc query -D -n %s", window.c_str());
-				string desktop = exec(cmd);
-				desktop = desktop.substr(0, desktop.length() - 1);
-
-				desktops[desktop][window] = true;
+				windows[window] = true;
 				
 				set_transparency(window, focus_floating_old ? transparency_active : transparency_inactive);
 				sync = true;
@@ -186,9 +173,9 @@ int main(int argc, char const *argv[])
 
 			if (focus_floating != focus_floating_old)
 			{
-				for (pair<string, bool> window : desktops[p[Focus_Desktop]])
+				for (pair<string, bool> window : windows)
 				{
-					int transparency = pick_transparency(window.first, window.second, focus_floating);
+					int transparency = pick_transparency(window.second, focus_floating);
 
 					if (transparency != -1)
 					{
@@ -205,19 +192,19 @@ int main(int argc, char const *argv[])
 			if (p[State_Name] != "floating")
 				continue;
 
-			bool tracked = window_in_map(desktops, p[State_Desktop], p[State_Window]);
+			bool tracked = window_in_map(windows, p[State_Window]);
 			bool floating = p[State_Value] == "on";
 
 			if (tracked)
-				desktops[p[State_Desktop]][p[State_Window]] = floating;
+				windows[p[State_Window]] = floating;
 
 			bool focus_floating = exec("bspc query -N -n focused.floating").length();
 
 			if (focus_floating != focus_floating_old)
 			{
-				for (pair<string, bool> window : desktops[p[Focus_Desktop]])
+				for (pair<string, bool> window : windows)
 				{
-					int transparency = pick_transparency(window.first, window.second, focus_floating);
+					int transparency = pick_transparency(window.second, focus_floating);
 
 					if (transparency != -1)
 					{
@@ -239,23 +226,11 @@ int main(int argc, char const *argv[])
 
 			focus_floating_old = focus_floating;
 		}
-		else if (p[0] == "node_transfer")
-		{
-			if (!window_in_map(desktops, p[Transfer_Desktop_Old], p[Transfer_Window]))
-			{
-				continue;
-			}
-
-			bool floating = desktops[p[Transfer_Desktop_Old]][p[Transfer_Window]];
-
-			desktops[p[Transfer_Desktop_Old]].erase(p[Transfer_Window]);
-			desktops[p[Transfer_Desktop]][p[Transfer_Window]] = floating;
-		}
 		else if (p[0] == "node_remove")
 		{
-			if (window_in_map(desktops, p[Transfer_Desktop_Old], p[Transfer_Window]))
+			if (window_in_map(windows, p[Transfer_Window]))
 			{
-				desktops[p[Remove_Desktop]].erase(p[Remove_Window]);
+				windows.erase(p[Remove_Window]);
 			}
 		}
 		else if (p[0] == "node_add")
@@ -271,7 +246,7 @@ int main(int argc, char const *argv[])
 					string state = exec(cmd);
 
 					bool floating = state == "floating";
-					desktops[p[Add_Desktop]][p[Add_Window]] = floating;
+					windows[p[Add_Window]] = floating;
 				}
 
 				XFree(classname);		
